@@ -73,11 +73,6 @@ def history(cursor, pattern=None, src=""):
             show_link = link[:100]
             title = row[1][:100]
 
-            ##  html += "<tr><td><a href='" + str(link) + "'>" + str(title[:100]) +\
-            ##  "</a></td>" + "<td>" + str(last_visit) + "</td>" + "<td>" + \
-            ##  str(link[:100]) + "</td>" + "</tr>\n"
-            ##
-            
             trow = "<tr><td><a href='{link}'>{title}</a></td><td>{last_visit}</td><td>{show_link}</td></tr>\n".format( **locals() )
             html += trow
 
@@ -111,18 +106,17 @@ def bookmarks(cursor, pattern=None):
 
     execute_query(cursor, the_query)
 
-    html = u""
-    html = read_template()
+    with open("template.html", 'r') as t:
+        html = t.read()
+
     html_file = open("bookmarks.html", 'w')
     for row in cursor:
+
         link = row[0]
         title = row[1]
+
         ## date = str(datetime.fromtimestamp(row[4]/1000000).strftime('%Y-%m-%d %H:%M:%S'))
         date = convert_moz_time( row[4] )
-
-        ##  html += "<tr><td><a href='"+link+"'>"+title+"</a></td>"+"<td>"+link+\
-        ##  "</td>"+"<td>"+date+"</td></tr>\n"
-        ##
 
         html += "<tr><td><a href='{link}'>{title}</a></td><td>{link}</td><td>{date}</td></tr>\n".format( **locals() )
         
