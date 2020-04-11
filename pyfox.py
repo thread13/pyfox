@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
+
 '''
 author: @thewhitetulip
 
@@ -64,15 +65,22 @@ def history(cursor, pattern=None, src=""):
         execute_query(cursor, sql)
 
         for row in cursor:
+
             ## last_visit = datetime.fromtimestamp(row[2]/1000000).strftime('%Y-%m-%d %H:%M:%S')
             last_visit = convert_moz_time( row[2] )
-            link = row[0]
-            title = row[1]
 
-            html += "<tr><td><a href='" + str(link) + "'>" + str(title[:100]) +\
-            "</a></td>" + "<td>" + str(last_visit) + "</td>" + "<td>" + \
-            str(link[:100]) + "</td>" + "</tr>\n"
-            #print(a)
+            link = row[0]
+            show_link = link[:100]
+            title = row[1][:100]
+
+            ##  html += "<tr><td><a href='" + str(link) + "'>" + str(title[:100]) +\
+            ##  "</a></td>" + "<td>" + str(last_visit) + "</td>" + "<td>" + \
+            ##  str(link[:100]) + "</td>" + "</tr>\n"
+            ##
+            
+            trow = "<tr><td><a href='{link}'>{title}</a></td><td>{last_visit}</td><td>{show_link}</td></tr>\n".format( **locals() )
+            html += trow
+
 
     if src == 'chrome':
         sql = "SELECT urls.url, urls.title, urls.visit_count, \
@@ -90,6 +98,7 @@ def history(cursor, pattern=None, src=""):
     html_file.write(html)
     html_file.close()
     open_browser("history.html")
+
 
 def bookmarks(cursor, pattern=None):
     ''' Function to extract bookmark related information '''
@@ -111,9 +120,14 @@ def bookmarks(cursor, pattern=None):
         ## date = str(datetime.fromtimestamp(row[4]/1000000).strftime('%Y-%m-%d %H:%M:%S'))
         date = convert_moz_time( row[4] )
 
-        html += "<tr><td><a href='"+link+"'>"+title+"</a></td>"+"<td>"+link+\
-        "</td>"+"<td>"+date+"</td></tr>\n"
-        print("%s %s"%(row[0], row[1]))
+        ##  html += "<tr><td><a href='"+link+"'>"+title+"</a></td>"+"<td>"+link+\
+        ##  "</td>"+"<td>"+date+"</td></tr>\n"
+        ##
+
+        html += "<tr><td><a href='{link}'>{title}</a></td><td>{link}</td><td>{date}</td></tr>\n".format( **locals() )
+        
+        print( "%s %s" % (link, title) )
+
     html += "</tbody>\n</table>\n</body>\n</html>"
 
     try:
