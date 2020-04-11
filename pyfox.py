@@ -15,6 +15,7 @@ from datetime import datetime
 import sys
 import argparse
 import webbrowser
+import tempfile
 
 # -----------------------------------------------------------------------------------
 # constants
@@ -37,7 +38,6 @@ def open_browser(url):
     webbrowser.open(url, autoraise=True)
 
 
-
 def convert_moz_time( moz_time_entry ):
     """ Convert Mozilla timestamp-alike data entries to an ISO 8601-ish representation """
 
@@ -46,6 +46,20 @@ def convert_moz_time( moz_time_entry ):
 
     return result
 
+
+def make_temp_filename( query_type = 'bookmarks' ):
+    """ let us have a constant rewritable path for query results, 
+        ideally in a temporary folder
+    """
+
+    tmpdir = tempfile.gettempdir()
+
+    if query_type == 'bookmarks' :
+        result = os.path.join( tmpdir, 'pyfox-bookmarks.html' )
+    else: # assume a 'history' query
+        result = os.path.join( tmpdir, 'pyfox-history.html' )
+
+    return result
 
 
 def history(cursor, pattern=None, src=""):
@@ -96,11 +110,14 @@ def history(cursor, pattern=None, src=""):
             print("%s %s"%(row[0], row[4]))
 
     html += "</tbody>\n</table>\n</body>\n</html>"
-    html_file = open("history.html", 'w')
+    
+    filename = make_temp_filename( 'history' )
+    html_file = open( filename, 'w' )
 
     html_file.write(html)
     html_file.close()
-    open_browser("history.html")
+    
+    open_browser( filename )
 
 
 def bookmarks(cursor, pattern=None):
@@ -117,7 +134,9 @@ def bookmarks(cursor, pattern=None):
     with open("template.html", 'r') as t:
         html = t.read()
 
-    html_file = open("bookmarks.html", 'w')
+    filename = make_temp_filename( 'bookmarks' )
+    ## html_file = open("bookmarks.html", 'w')
+    html_file = open( filename, 'w' )
     for row in cursor:
 
         link = row[0]
@@ -137,7 +156,10 @@ def bookmarks(cursor, pattern=None):
     except:
         html_file.write(html)
     html_file.close()
-    open_browser("bookmarks.html")
+    
+    ## open_browser("bookmarks.html")
+    open_browser( filename )
+
 
 def get_path(browser):
     '''Gets the path where the sqlite3 database file is present'''
