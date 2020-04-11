@@ -28,23 +28,27 @@ def open_browser(url):
     webbrowser.open(url, autoraise=True)
 
 
-def read_template():
-    """ Reads the html content from the template which will be returned
-    as a string to write in another file """
-    file = open("template.html", 'r')
-    lines = file.readlines()
-
-    tmp = u""
-    lines = [line.strip() for line in lines]
-    for line in lines:
-        tmp += str(line)
-        tmp += "\n"
-    return tmp
+##  def read_template():
+##      """ Reads the html content from the template which will be returned
+##      as a string to write in another file """
+##      file = open("template.html", 'r')
+##      lines = file.readlines()
+##  
+##      tmp = u""
+##      lines = [line.strip() for line in lines]
+##      for line in lines:
+##          tmp += str(line)
+##          tmp += "\n"
+##      return tmp
+##
 
 def history(cursor, pattern=None, src=""):
     ''' Function which extracts history from the sqlite file '''
-    html = u""
-    html = read_template()
+    
+    ## html = read_template()
+    with open("template.html", 'r') as t:
+        html = t.read()
+
     if src == 'firefox':
         sql = """select url, title, last_visit_date,rev_host
         from moz_historyvisits natural join moz_places where
