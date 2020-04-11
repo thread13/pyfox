@@ -16,6 +16,14 @@ import sys
 import argparse
 import webbrowser
 
+# -----------------------------------------------------------------------------------
+# constants
+
+# Firefox history database name, see
+# [ https://developer.mozilla.org/en-US/docs/Mozilla/Tech/Places/Database ]
+DBNAME = 'places.sqlite'
+
+# -----------------------------------------------------------------------------------
 
 def execute_query(cursor, query):
     ''' Takes the cursor object and the query, executes it '''
@@ -163,7 +171,9 @@ if __name__ == "__main__":
         home_dir = os.environ['HOME']
         firefox_path = home_dir + firefox_path; print(firefox_path)
         profiles = [i for i in os.listdir(firefox_path) if i.endswith('.default')]
-        sqlite_path = firefox_path+ profiles[0]+'/places.sqlite'
+        ## sqlite_path = firefox_path+ profiles[0]+'/places.sqlite'
+        sqlite_path = os.path.join(firefox_path, profiles[0], DBNAME )
+
         print(sqlite_path)
         if os.path.exists(sqlite_path):
             firefox_connection = sqlite3.connect(sqlite_path)
