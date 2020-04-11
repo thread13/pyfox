@@ -28,24 +28,20 @@ def open_browser(url):
     webbrowser.open(url, autoraise=True)
 
 
-##  def read_template():
-##      """ Reads the html content from the template which will be returned
-##      as a string to write in another file """
-##      file = open("template.html", 'r')
-##      lines = file.readlines()
-##  
-##      tmp = u""
-##      lines = [line.strip() for line in lines]
-##      for line in lines:
-##          tmp += str(line)
-##          tmp += "\n"
-##      return tmp
-##
+
+def convert_moz_time( moz_time_entry ):
+    """ Convert Mozilla timestamp-alike data entries to an ISO 8601-ish representation """
+
+    # [ https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSPR/Reference/PRTime ]
+    result = datetime.fromtimestamp( moz_time_entry/1000000 ).strftime('%Y-%m-%d %H:%M:%S')
+
+    return result
+
+
 
 def history(cursor, pattern=None, src=""):
     ''' Function which extracts history from the sqlite file '''
     
-    ## html = read_template()
     with open("template.html", 'r') as t:
         html = t.read()
 
@@ -68,7 +64,8 @@ def history(cursor, pattern=None, src=""):
         execute_query(cursor, sql)
 
         for row in cursor:
-            last_visit = datetime.fromtimestamp(row[2]/1000000).strftime('%Y-%m-%d %H:%M:%S')
+            ## last_visit = datetime.fromtimestamp(row[2]/1000000).strftime('%Y-%m-%d %H:%M:%S')
+            last_visit = convert_moz_time( row[2] )
             link = row[0]
             title = row[1]
 
@@ -111,7 +108,8 @@ def bookmarks(cursor, pattern=None):
     for row in cursor:
         link = row[0]
         title = row[1]
-        date = str(datetime.fromtimestamp(row[4]/1000000).strftime('%Y-%m-%d %H:%M:%S'))
+        ## date = str(datetime.fromtimestamp(row[4]/1000000).strftime('%Y-%m-%d %H:%M:%S'))
+        date = convert_moz_time( row[4] )
 
         html += "<tr><td><a href='"+link+"'>"+title+"</a></td>"+"<td>"+link+\
         "</td>"+"<td>"+date+"</td></tr>\n"
