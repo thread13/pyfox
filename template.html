@@ -25,9 +25,11 @@
        <script src="jquery.min.js"></script>
     <script src="jquery.filtertable.min.js"></script>
     <script>
+    // see [ https://github.com/sunnywalker/jQuery.FilterTable ]
     $(document).ready(function() {
         $('table').filterTable({ // apply filterTable to all tables on this page
             quickList: ['python', 'go', 'golang',] // add some shortcut searches
+        ,   minRows: 1
         });
     });
     </script>
