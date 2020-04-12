@@ -20,6 +20,12 @@ import tempfile
 # -----------------------------------------------------------------------------------
 # constants
 
+# "dev mode" with full tracebacks
+_dbg = True # change this in production
+if _dbg:
+    import cgitb
+    cgitb.enable(format='text')
+
 # Firefox history database name, see
 # [ https://developer.mozilla.org/en-US/docs/Mozilla/Tech/Places/Database ]
 DBNAME = 'places.sqlite'
@@ -31,7 +37,10 @@ def execute_query(cursor, query):
     try:
         cursor.execute(query)
     except Exception as error:
-        print(str(error) + "\n " + query)
+        if not _dbg:
+            print(str(error) + "\n " + query)
+        else:
+            raise
 
 def open_browser(url):
     '''Opens the default browswer'''
@@ -154,7 +163,10 @@ def bookmarks(cursor, pattern=None):
     try:
         html_file.write(html.encode('utf8'))
     except:
-        html_file.write(html)
+        if not _dbg:
+            html_file.write(html)
+        else:
+            raise
     html_file.close()
     
     ## open_browser("bookmarks.html")
@@ -205,9 +217,12 @@ if __name__ == "__main__":
         #if os.path.exists(chrome_sqlite_path):
         #    chrome_connection = sqlite3.connect(chrome_sqlite_path)
     except Exception as error:
-        print("_main_")
-        print(str(error))
-        exit(1)
+        if not _dbg:
+            print("_main_")
+            print(str(error))
+            exit(1)
+        else:
+            raise
 
     cursor = firefox_connection.cursor()
     #CHROME_CURSOR = chrome_connection.cursor()
