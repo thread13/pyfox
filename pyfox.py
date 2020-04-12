@@ -30,6 +30,19 @@ if _dbg:
 # [ https://developer.mozilla.org/en-US/docs/Mozilla/Tech/Places/Database ]
 DBNAME = 'places.sqlite'
 
+# moving SQL code to external files makes it easier to test with sqlite3 utility, e.g. :
+#   "echo '.read test_query.sql | sqlite3 places.sqlite"
+FF_QUERY_BOOKMARKS = 'bookmarks_query.sql'
+FF_QUERY_HISTORY   = 'history_query.sql'
+# this can be wrapped with some function/class and invoked from __main__,
+# however, for a small utility it shall just do
+PROGDIR = os.path.dirname( sys.argv[0] )
+## print( f"PROGDIR: {PROGDIR!r}" )
+
+# converting to paths relative to sys.argv[0]
+FF_QUERY_BOOKMARKS = os.path.join( PROGDIR, FF_QUERY_BOOKMARKS )
+FF_QUERY_HISTORY   = os.path.join( PROGDIR, FF_QUERY_HISTORY )
+
 # -----------------------------------------------------------------------------------
 
 def execute_query(cursor, query):
@@ -78,22 +91,26 @@ def history(cursor, pattern=None, src=""):
         html = t.read()
 
     if src == 'firefox':
-        sql = """select url, title, last_visit_date,rev_host
-        from moz_historyvisits natural join moz_places where
-        last_visit_date is not null and url  like 'http%' and title is not null
-        and url not like '%google.com%' and url not like '%gmail.com%' and
-        url not like '%facebook.com%' and url not like '%amazon.com%' and
-        url not like '%127.0.0.1%' and url not like '%google.com%'
-        and url not like '%duckduckgo.com%'
-        and url not like '%change.org%' and url not like
-        '%twitter.com%' and url not like '%google.co.in%' """
+        
+        with open( FF_QUERY_HISTORY ) as f:
+            ff_sql = f.read()
+        
+        ##  sql = """select url, title, last_visit_date,rev_host
+        ##  from moz_historyvisits natural join moz_places where
+        ##  last_visit_date is not null and url  like 'http%' and title is not null
+        ##  and url not like '%google.com%' and url not like '%gmail.com%' and
+        ##  url not like '%facebook.com%' and url not like '%amazon.com%' and
+        ##  url not like '%127.0.0.1%' and url not like '%google.com%'
+        ##  and url not like '%duckduckgo.com%'
+        ##  and url not like '%change.org%' and url not like
+        ##  '%twitter.com%' and url not like '%google.co.in%' """
 
         if pattern is not None:
-            sql += " and url like '%"+pattern+"%' "
-        sql += " order by last_visit_date desc;"
+            ff_sql += " and url like '%"+pattern+"%' "
+        ff_sql += " order by last_visit_date desc;"
 
 
-        execute_query(cursor, sql)
+        execute_query(cursor, ff_sql)
 
         for row in cursor:
 
@@ -133,13 +150,16 @@ def history(cursor, pattern=None, src=""):
 def bookmarks( cursor ):
     ''' Function to extract bookmark related information '''
 
-    the_query = """select url, moz_places.title, rev_host, frecency,
-    last_visit_date from moz_places  join  \
-    moz_bookmarks on moz_bookmarks.fk=moz_places.id where visit_count>0
-    and moz_places.url  like 'http%'
-    order by dateAdded desc;"""
+    ##  the_query = """select url, moz_places.title, rev_host, frecency,
+    ##  last_visit_date from moz_places  join  \
+    ##  moz_bookmarks on moz_bookmarks.fk=moz_places.id where visit_count>0
+    ##  and moz_places.url  like 'http%'
+    ##  order by dateAdded desc;"""
 
-    execute_query(cursor, the_query)
+    with open( FF_QUERY_BOOKMARKS ) as f:
+        ff_query = f.read()
+
+    execute_query(cursor, ff_query)
 
     with open("template.html", 'r') as t:
         html = t.read()
