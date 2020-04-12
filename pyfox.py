@@ -193,12 +193,28 @@ def get_path(browser):
 
     return path
 
-if __name__ == "__main__":
+
+def parse_options():
+    """ handle command-line arguments """
+
     DESC_PYFOX = "Extract information from firefox's internal database"
+    
     parser = argparse.ArgumentParser(description=DESC_PYFOX)
+    
     parser.add_argument('--bm', '-b', default="")
     parser.add_argument('--hist', '-y', default="")
+    
     args = parser.parse_args()
+
+    return args
+
+
+# -----------------------------------------------------------------------------------
+# main
+
+if __name__ == "__main__":
+
+    options = parse_options()
 
     try:
         firefox_path = get_path('firefox')
@@ -227,11 +243,11 @@ if __name__ == "__main__":
     cursor = firefox_connection.cursor()
     #CHROME_CURSOR = chrome_connection.cursor()
 
-    if args.bm is not '':
-        bookmarks(cursor, pattern=args.bm)
-    if args.hist is not '':
+    if options.bm is not '':
+        bookmarks(cursor, pattern=options.bm)
+    if options.hist is not '':
         print("From firefox")
-        history(cursor, pattern=args.hist, src="firefox")
+        history(cursor, pattern=options.hist, src="firefox")
         #print("From chrome")
         #history(CHROME_CURSOR, src="chrome")
 
