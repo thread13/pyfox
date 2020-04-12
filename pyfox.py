@@ -129,7 +129,8 @@ def history(cursor, pattern=None, src=""):
     open_browser( filename )
 
 
-def bookmarks(cursor, pattern=None):
+## def bookmarks(cursor, pattern=None):
+def bookmarks( cursor ):
     ''' Function to extract bookmark related information '''
 
     the_query = """select url, moz_places.title, rev_host, frecency,
@@ -197,12 +198,12 @@ def get_path(browser):
 def parse_options():
     """ handle command-line arguments """
 
-    DESC_PYFOX = "Extract information from firefox's internal database"
+    DESC_PYFOX = "Extract records for Firefox history and/or bookmarks"
     
     parser = argparse.ArgumentParser(description=DESC_PYFOX)
     
-    parser.add_argument('--bm', '-b', default="")
-    parser.add_argument('--hist', '-y', default="")
+    parser.add_argument('--bookmarks', '--bm', '-b', action='store_true', default=None)
+    parser.add_argument('--history', '-y', nargs='?', default=None, const='' )
     
     args = parser.parse_args()
 
@@ -243,11 +244,12 @@ if __name__ == "__main__":
     cursor = firefox_connection.cursor()
     #CHROME_CURSOR = chrome_connection.cursor()
 
-    if options.bm is not '':
-        bookmarks(cursor, pattern=options.bm)
-    if options.hist is not '':
+    if options.bookmarks is not None:
+        ## bookmarks(cursor, pattern=options.bm)
+        bookmarks(cursor)
+    if options.history is not None:
         print("From firefox")
-        history(cursor, pattern=options.hist, src="firefox")
+        history(cursor, pattern=options.history, src="firefox")
         #print("From chrome")
         #history(CHROME_CURSOR, src="chrome")
 
