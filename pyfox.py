@@ -16,6 +16,9 @@ import sys
 import argparse
 import webbrowser
 import tempfile
+import fnmatch
+import shutil
+
 
 # -----------------------------------------------------------------------------------
 # constants
@@ -43,6 +46,10 @@ PROGDIR = os.path.dirname( sys.argv[0] )
 FF_QUERY_BOOKMARKS = os.path.join( PROGDIR, FF_QUERY_BOOKMARKS )
 FF_QUERY_HISTORY   = os.path.join( PROGDIR, FF_QUERY_HISTORY )
 
+# attaching js table filtering code, see [  ]
+JQ_MIN_PATH = 'jquery.min.js'
+JQ_FT_PATH  = 'jquery.filtertable.min.js'
+
 # -----------------------------------------------------------------------------------
 
 def execute_query(cursor, query):
@@ -54,6 +61,91 @@ def execute_query(cursor, query):
             print(str(error) + "\n " + query)
         else:
             raise
+
+
+# an external wrapper
+def run_query_wrapper( dbname, query ):
+    """ a generator ; opens an sqlite database, runs a query, 
+        yields rows, closes the connection """
+
+    if _dbg:
+        print( dbname )
+        print( query )
+
+    try:
+        for row in run_query( dbname, query ):
+            yield row
+
+    except Exception as error:
+        if _dbg:
+            raise
+        else:
+            print(str(error) + "\n " + query)
+            ## sys.exit(2)
+
+
+# next-level wrapper: tries to open an existing database, 
+# and reopens a temporary if that fails ;
+# calls an internal function to actually run a query )
+def run_query( dbname, query ):
+    """ a generator ; opens an sqlite database, runs a query, 
+        yields rows, closes the connection """
+
+
+    reopen = False
+
+    try:
+        
+        for row in run_query_internal( dbname, query ):
+            yield row
+                
+    except sqlite3.OperationalError as e:
+        ## print( (e, e.args, vars(e)) )
+        if 'database is locked' in e.args :
+            reopen = True
+        else:
+            raise
+    else:
+        reopen = False
+
+    if reopen:
+        # try to open the same as a temporary file
+        # // not ideal, but shall do for home use
+        tmp = tempfile.NamedTemporaryFile(delete=False, prefix='pyfox', suffix='.sqlite')
+        tmpname = tmp.name
+        if _dbg: 
+            print( tmpname )
+        shutil.copyfile( dbname, tmpname )
+        tmp.close()
+
+        for row in run_query_internal( tmpname, query ):
+            yield row
+
+        ## if not _dbg: 
+        if 1:
+            os.unlink( tmpname )
+
+
+
+# implementation ; may reopne a copy for a locked database file
+def run_query_internal( dbname, query, _print_max = 30 ):
+    """ a generator ; opens an sqlite database, runs a query, 
+        yields rows, closes the connection """
+
+    with sqlite3.connect(dbname) as conn:
+    
+        c = conn.cursor()
+        for n, row in enumerate(c.execute( query )):
+
+            if _dbg:
+                if n < _print_max:
+                    print(row)
+                elif n == _print_max:
+                    print('...')
+
+            yield row
+
+
 
 def open_browser(url):
     '''Opens the default browswer'''
@@ -76,6 +168,13 @@ def make_temp_filename( query_type = 'bookmarks' ):
 
     tmpdir = tempfile.gettempdir()
 
+    # copy js accessory code if missing
+    for js_filename in ( JQ_MIN_PATH, JQ_FT_PATH ):
+        js_orig = os.path.join( PROGDIR, js_filename )
+        js_dest = os.path.join( tmpdir, js_filename )
+        if not os.path.exists( js_dest ):
+            shutil.copyfile( js_orig, js_dest )
+
     if query_type == 'bookmarks' :
         result = os.path.join( tmpdir, 'pyfox-bookmarks.html' )
     else: # assume a 'history' query
@@ -84,7 +183,8 @@ def make_temp_filename( query_type = 'bookmarks' ):
     return result
 
 
-def history(cursor, pattern=None, src=""):
+## def history(cursor, pattern=None, src=""):
+def history(dbname, pattern=None, src=""):
     ''' Function which extracts history from the sqlite file '''
     
     with open("template.html", 'r') as t:
@@ -93,28 +193,17 @@ def history(cursor, pattern=None, src=""):
     if src == 'firefox':
         
         with open( FF_QUERY_HISTORY ) as f:
-            ff_sql = f.read()
+            ff_sql = f.read().rstrip().rstrip(';')
         
-        ##  sql = """select url, title, last_visit_date,rev_host
-        ##  from moz_historyvisits natural join moz_places where
-        ##  last_visit_date is not null and url  like 'http%' and title is not null
-        ##  and url not like '%google.com%' and url not like '%gmail.com%' and
-        ##  url not like '%facebook.com%' and url not like '%amazon.com%' and
-        ##  url not like '%127.0.0.1%' and url not like '%google.com%'
-        ##  and url not like '%duckduckgo.com%'
-        ##  and url not like '%change.org%' and url not like
-        ##  '%twitter.com%' and url not like '%google.co.in%' """
-
         if pattern is not None:
-            ff_sql += " and url like '%"+pattern+"%' "
-        ff_sql += " order by last_visit_date desc;"
+            ff_sql += " AND url LIKE '%"+pattern+"%' "
+        ff_sql += " ORDER BY last_visit_date DESC;"
 
 
-        execute_query(cursor, ff_sql)
+        ## execute_query(cursor, ff_sql)
+        ## for row in cursor:
+        for row in run_query_wrapper( dbname, ff_sql ):
 
-        for row in cursor:
-
-            ## last_visit = datetime.fromtimestamp(row[2]/1000000).strftime('%Y-%m-%d %H:%M:%S')
             last_visit = convert_moz_time( row[2] )
 
             link = row[0]
@@ -147,47 +236,50 @@ def history(cursor, pattern=None, src=""):
 
 
 ## def bookmarks(cursor, pattern=None):
-def bookmarks( cursor ):
+## def bookmarks( cursor ):
+def bookmarks(dbname, pattern=None, _max_dbg_lines = 30):
     ''' Function to extract bookmark related information '''
-
-    ##  the_query = """select url, moz_places.title, rev_host, frecency,
-    ##  last_visit_date from moz_places  join  \
-    ##  moz_bookmarks on moz_bookmarks.fk=moz_places.id where visit_count>0
-    ##  and moz_places.url  like 'http%'
-    ##  order by dateAdded desc;"""
 
     with open( FF_QUERY_BOOKMARKS ) as f:
         ff_query = f.read()
 
-    execute_query(cursor, ff_query)
+    ## execute_query(cursor, ff_query)
 
     with open("template.html", 'r') as t:
         html = t.read()
 
     filename = make_temp_filename( 'bookmarks' )
-    ## html_file = open("bookmarks.html", 'w')
-    html_file = open( filename, 'w' )
-    for row in cursor:
+    html_file = open( filename, 'wb' )
+
+    ## for row in cursor:
+    for n, row in enumerate(run_query_wrapper( dbname, ff_query )):
 
         link = row[0]
+        show_link = link[:100]
         title = row[1]
 
-        ## date = str(datetime.fromtimestamp(row[4]/1000000).strftime('%Y-%m-%d %H:%M:%S'))
         date = convert_moz_time( row[4] )
 
-        html += "<tr><td><a href='{link}'>{title}</a></td><td>{link}</td><td>{date}</td></tr>\n".format( **locals() )
+        html += "<tr><td><a href='{link}'>{title}</a></td><td>{date}</td><td>{show_link}</td></tr>\n".format( **locals() )
         
-        print( "%s %s" % (link, title) )
+        if n < _max_dbg_lines:
+            print( "%s %s" % (link, title) )
 
     html += "</tbody>\n</table>\n</body>\n</html>"
 
-    try:
-        html_file.write(html.encode('utf8'))
-    except:
-        if not _dbg:
-            html_file.write(html)
-        else:
-            raise
+    # TODO: handle possible encoding issues if bookmarks aren't in utf-8 
+    #       ( could they be? what the docs say? )
+    #       // possibly use locale.getpreferredencoding()
+    #       // sys.getfilesystemencoding() could be a second guess, I suppose
+    html_file.write(html.encode('utf8'))
+    if 0:
+        try:
+            html_file.write(html.encode('utf8'))
+        except:
+            if not _dbg:
+                html_file.write(html)
+            else:
+                raise
     html_file.close()
     
     ## open_browser("bookmarks.html")
@@ -246,8 +338,9 @@ if __name__ == "__main__":
         sqlite_path = os.path.join(firefox_path, profiles[0], DBNAME )
 
         print(sqlite_path)
-        if os.path.exists(sqlite_path):
-            firefox_connection = sqlite3.connect(sqlite_path)
+        if 0:
+            if os.path.exists(sqlite_path):
+                firefox_connection = sqlite3.connect(sqlite_path)
 
         #chrome_sqlite_path = '/home/thewhitetulip/.config/chromium/Default/History'
         #chrome_sqlite_path = get_path('chrome')
@@ -261,17 +354,20 @@ if __name__ == "__main__":
         else:
             raise
 
-    cursor = firefox_connection.cursor()
+    ## cursor = firefox_connection.cursor()
     #CHROME_CURSOR = chrome_connection.cursor()
 
     if options.bookmarks is not None:
         ## bookmarks(cursor, pattern=options.bm)
-        bookmarks(cursor)
+        ## bookmarks(cursor)
+        bookmarks(sqlite_path, pattern=options.bookmarks) 
+
     if options.history is not None:
         print("From firefox")
-        history(cursor, pattern=options.history, src="firefox")
+        ## history(cursor, pattern=options.history, src="firefox")
+        history(sqlite_path, pattern=options.history, src="firefox")
         #print("From chrome")
         #history(CHROME_CURSOR, src="chrome")
 
-    cursor.close()
+    ## cursor.close()
     #CHROME_CURSOR.close()
