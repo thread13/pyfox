@@ -59,15 +59,16 @@ JQ_FT_PATH  = 'jquery.filtertable.min.js'
 
 # -----------------------------------------------------------------------------------
 
-def execute_query(cursor, query):
-    ''' Takes the cursor object and the query, executes it '''
-    try:
-        cursor.execute(query)
-    except Exception as error:
-        if not _dbg:
-            print(str(error) + "\n " + query)
-        else:
-            raise
+if 0:
+    def execute_query(cursor, query):
+        ''' Takes the cursor object and the query, executes it '''
+        try:
+            cursor.execute(query)
+        except Exception as error:
+            if not _dbg:
+                print(str(error) + "\n " + query)
+            else:
+                raise
 
 
 # an external wrapper
@@ -194,7 +195,6 @@ def make_temp_filename( query_type = 'bookmarks' ):
 def history(dbname, pattern=None, src=""):
     ''' Function which extracts history from the sqlite file '''
     
-    ## with open("template.html", 'r') as t:
     with open( HTML_TEMPLATE_HISTORY, 'r') as t:
         html = t.read()
 
@@ -209,7 +209,6 @@ def history(dbname, pattern=None, src=""):
 
 
         ## execute_query(cursor, ff_sql)
-        ## for row in cursor:
         for row in run_query_wrapper( dbname, ff_sql ):
 
             last_visit = convert_moz_time( row[2] )
@@ -222,15 +221,18 @@ def history(dbname, pattern=None, src=""):
             html += trow
 
 
-    if src == 'chrome':
-        sql = "SELECT urls.url, urls.title, urls.visit_count, \
-        urls.typed_count, datetime(urls.last_visit_time/1000000-11644473600,'unixepoch','localtime'), urls.hidden,\
-        visits.visit_time, visits.from_visit, visits.transition FROM urls, visits\
-         WHERE  urls.id = visits.url and urls.title is not null order by last_visit_time desc "
+    # turning off chrome 'branch' -- anyone interested feel free to reopen it and handle like FF code above )
+    if 0:
+        if src == 'chrome':
+            sql = "SELECT urls.url, urls.title, urls.visit_count, \
+            urls.typed_count, datetime(urls.last_visit_time/1000000-11644473600,'unixepoch','localtime'), urls.hidden,\
+            visits.visit_time, visits.from_visit, visits.transition FROM urls, visits\
+             WHERE  urls.id = visits.url and urls.title is not null order by last_visit_time desc "
 
-        execute_query(cursor, sql)
-        for row in cursor:
-            print("%s %s"%(row[0], row[4]))
+            execute_query(cursor, sql)
+            for row in cursor:
+                print("%s %s"%(row[0], row[4]))
+
 
     html += "</tbody>\n</table>\n</body>\n</html>"
     
@@ -244,30 +246,25 @@ def history(dbname, pattern=None, src=""):
 
 
 ## def bookmarks(cursor, pattern=None):
-## def bookmarks( cursor ):
-def bookmarks(dbname, pattern=None, _max_dbg_lines = 30):
+def bookmarks(dbname, pattern=None, _max_dbg_lines = 20):
     ''' Function to extract bookmark related information '''
 
     with open( FF_QUERY_BOOKMARKS ) as f:
         ff_query = f.read()
 
-    ## execute_query(cursor, ff_query)
 
-    ## with open("template.html", 'r') as t:
     with open( HTML_TEMPLATE_BOOKMARKS, 'r') as t:
         html = t.read()
 
     filename = make_temp_filename( 'bookmarks' )
     html_file = open( filename, 'wb' )
 
-    ## for row in cursor:
     for n, row in enumerate(run_query_wrapper( dbname, ff_query )):
 
         link = row[0]
         show_link = link[:100]
         title = row[1]
 
-        ## date = convert_moz_time( row[4] )
         date = convert_moz_time( row[2] )
 
         folder = row[3]
@@ -294,7 +291,6 @@ def bookmarks(dbname, pattern=None, _max_dbg_lines = 30):
                 raise
     html_file.close()
     
-    ## open_browser("bookmarks.html")
     open_browser( filename )
 
 
@@ -319,16 +315,45 @@ def get_path(browser):
     return path
 
 
+def list_places(base_dir, filter_pattern):
+    """find all profiles -- folders with 'places.sqlite' inside
+       and return a list of 'places.sqlite' full paths
+       
+       args:
+        - base_dir -- path for firefox settings ( get_path() -> )
+        - filter_pattern -- an fnmatch/glob-style pattern to filter profile names
+    """
+
+    found = []
+
+    # if there are no glob characters at all, append some
+    if '*' not in filter_pattern:
+        if '?' not in filter_pattern:
+            filter_pattern = '*' + filter_pattern + '*'
+
+    dirs = os.listdir( base_dir )
+    filtered = fnmatch.filter( dirs, filter_pattern )
+    for d in filtered:
+        testpath = os.path.join( base_dir, d, DBNAME )
+        if os.path.exists( testpath ):
+            found.append( testpath )
+
+    return found
+
+
 def parse_options():
     """ handle command-line arguments """
 
     DESC_PYFOX = "Extract records for Firefox history and/or bookmarks"
-    
+
     parser = argparse.ArgumentParser(description=DESC_PYFOX)
-    
+
     parser.add_argument('--bookmarks', '--bm', '-b', action='store_true', default=None)
     parser.add_argument('--history', '-y', nargs='?', default=None, const='' )
-    
+
+    parser.add_argument('--profile-pattern', '-p', default="*", dest='profile_filter'
+                       , help="a shell-alike pattern to filter profile names; we'll take the first one")
+
     args = parser.parse_args()
 
     return args
@@ -345,14 +370,25 @@ if __name__ == "__main__":
         firefox_path = get_path('firefox')
         home_dir = os.environ['HOME']
         firefox_path = home_dir + firefox_path; print(firefox_path)
-        profiles = [i for i in os.listdir(firefox_path) if i.endswith('.default')]
+        
+        places = list_places( firefox_path, filter_pattern=options.profile_filter )
+        ## profiles = [i for i in os.listdir(firefox_path) if i.endswith('.default')]
         ## sqlite_path = firefox_path+ profiles[0]+'/places.sqlite'
-        sqlite_path = os.path.join(firefox_path, profiles[0], DBNAME )
-
+        if places:
+            sqlite_path = places[0]
+        else:
+            print("no profile found") ; sys.exit(2)
         print(sqlite_path)
+
         if 0:
             if os.path.exists(sqlite_path):
                 firefox_connection = sqlite3.connect(sqlite_path)
+
+        # ^^^ not sure why we need this additional check, 
+        #     but let's preserve it just in case if it helps to debug something 
+        if _dbg:
+            assert os.path.exists( sqlite_path )
+
 
         #chrome_sqlite_path = '/home/thewhitetulip/.config/chromium/Default/History'
         #chrome_sqlite_path = get_path('chrome')
