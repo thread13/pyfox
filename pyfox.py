@@ -354,6 +354,10 @@ def parse_options():
     parser.add_argument('--profile-pattern', '-p', default="*", dest='profile_filter'
                        , help="a shell-alike pattern to filter profile names; we'll take the first one")
 
+    # this will have priority compared to --profile-pattern ( as a more low-level thing ) )
+    parser.add_argument('--use-places', '--db', dest='places_sqlite', default = None
+                       , help="direct path to a 'places.sqlite' database ; takes priority when used along with '--profile-pattern'")
+
     args = parser.parse_args()
 
     return args
@@ -371,13 +375,26 @@ if __name__ == "__main__":
         home_dir = os.environ['HOME']
         firefox_path = home_dir + firefox_path; print(firefox_path)
         
-        places = list_places( firefox_path, filter_pattern=options.profile_filter )
-        ## profiles = [i for i in os.listdir(firefox_path) if i.endswith('.default')]
-        ## sqlite_path = firefox_path+ profiles[0]+'/places.sqlite'
-        if places:
-            sqlite_path = places[0]
-        else:
-            print("no profile found") ; sys.exit(2)
+        sqlite_path = None # not set yet
+        if options.places_sqlite is not None:
+            if os.path.exists( options.places_sqlite ):
+                sqlite_path = options.places_sqlite
+            else:
+                print( "--db: path {0!r} does not exist!".format( options.places_sqlite )
+                     , file=sys.stderr  
+                     )
+
+        # next try
+        if sqlite_path is None:
+        
+            places = list_places( firefox_path, filter_pattern=options.profile_filter )
+            ## profiles = [i for i in os.listdir(firefox_path) if i.endswith('.default')]
+            ## sqlite_path = firefox_path+ profiles[0]+'/places.sqlite'
+            if places:
+                sqlite_path = places[0]
+            else:
+                print("no profile found") ; sys.exit(2)
+
         print(sqlite_path)
 
         if 0:
