@@ -33,8 +33,8 @@ if _dbg:
 # [ https://developer.mozilla.org/en-US/docs/Mozilla/Tech/Places/Database ]
 DBNAME = 'places.sqlite'
 
-HTML_TEMPLATE_BOOKMARKS = 'template.html'
-HTML_TEMPLATE_HISTORY   = HTML_TEMPLATE_BOOKMARKS
+HTML_TEMPLATE_BOOKMARKS = 'template_bookmarks.html'
+HTML_TEMPLATE_HISTORY   = 'template_history.html'
 
 # moving SQL code to external files makes it easier to test with sqlite3 utility, e.g. :
 #   "echo '.read test_query.sql | sqlite3 places.sqlite"
@@ -267,9 +267,12 @@ def bookmarks(dbname, pattern=None, _max_dbg_lines = 30):
         show_link = link[:100]
         title = row[1]
 
-        date = convert_moz_time( row[4] )
+        ## date = convert_moz_time( row[4] )
+        date = convert_moz_time( row[2] )
 
-        html += "<tr><td><a href='{link}'>{title}</a></td><td>{date}</td><td>{show_link}</td></tr>\n".format( **locals() )
+        folder = row[3]
+
+        html += "<tr><td><a href='{link}'>{title}</a></td><td>{date}</td><td>{folder}</td><td>{show_link}</td></tr>\n".format( **locals() )
         
         if n < _max_dbg_lines:
             print( "%s %s" % (link, title) )
