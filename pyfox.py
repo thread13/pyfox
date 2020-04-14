@@ -33,6 +33,9 @@ if _dbg:
 # [ https://developer.mozilla.org/en-US/docs/Mozilla/Tech/Places/Database ]
 DBNAME = 'places.sqlite'
 
+HTML_TEMPLATE_BOOKMARKS = 'template.html'
+HTML_TEMPLATE_HISTORY   = HTML_TEMPLATE_BOOKMARKS
+
 # moving SQL code to external files makes it easier to test with sqlite3 utility, e.g. :
 #   "echo '.read test_query.sql | sqlite3 places.sqlite"
 FF_QUERY_BOOKMARKS = 'bookmarks_query.sql'
@@ -46,7 +49,11 @@ PROGDIR = os.path.dirname( sys.argv[0] )
 FF_QUERY_BOOKMARKS = os.path.join( PROGDIR, FF_QUERY_BOOKMARKS )
 FF_QUERY_HISTORY   = os.path.join( PROGDIR, FF_QUERY_HISTORY )
 
-# attaching js table filtering code, see [  ]
+HTML_TEMPLATE_BOOKMARKS = os.path.join( PROGDIR, HTML_TEMPLATE_BOOKMARKS )
+HTML_TEMPLATE_HISTORY   = os.path.join( PROGDIR, HTML_TEMPLATE_HISTORY )
+
+# attaching js table filtering code, 
+# see [ https://github.com/sunnywalker/jQuery.FilterTable ]
 JQ_MIN_PATH = 'jquery.min.js'
 JQ_FT_PATH  = 'jquery.filtertable.min.js'
 
@@ -187,7 +194,8 @@ def make_temp_filename( query_type = 'bookmarks' ):
 def history(dbname, pattern=None, src=""):
     ''' Function which extracts history from the sqlite file '''
     
-    with open("template.html", 'r') as t:
+    ## with open("template.html", 'r') as t:
+    with open( HTML_TEMPLATE_HISTORY, 'r') as t:
         html = t.read()
 
     if src == 'firefox':
@@ -245,7 +253,8 @@ def bookmarks(dbname, pattern=None, _max_dbg_lines = 30):
 
     ## execute_query(cursor, ff_query)
 
-    with open("template.html", 'r') as t:
+    ## with open("template.html", 'r') as t:
+    with open( HTML_TEMPLATE_BOOKMARKS, 'r') as t:
         html = t.read()
 
     filename = make_temp_filename( 'bookmarks' )
