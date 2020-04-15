@@ -18,6 +18,7 @@ import webbrowser
 import tempfile
 import fnmatch
 import shutil
+from configparser import SafeConfigParser
 
 # debugging 
 from pprint import pprint as pp
@@ -338,6 +339,33 @@ def get_path(browser):
     return path
 
 
+def list_profiles( base_dir ):
+    """ enumerates profile names and related filenames """
+
+    # dicts are ordered since 3.7 (since 3.6 for CPython) ;
+    # till then, we would sacrifice profile order for pretty-printing )
+    result = {}
+
+    inifile = os.path.join(base_dir, 'profiles.ini')
+    if os.path.exists( inifile ):
+        
+        cp = SafeConfigParser()
+        cp.read( inifile )
+        
+        for section in cp.sections():
+            if cp.has_option(section, 'path'):
+                if cp.has_option( section, 'name' ):
+                   
+                    p = cp.get(section, 'path', raw = True)
+                    n = cp.get(section, 'name', raw = True)
+                    
+                    fullpath = os.path.join( base_dir, p )
+                    
+                    result[ fullpath ] = n
+                    
+    return result
+
+
 def list_places(base_dir, filter_patterns = [], _default_filter = '*'):
     """find all profiles -- folders with 'places.sqlite' inside
        and return a list of 'places.sqlite' full paths
@@ -390,11 +418,14 @@ def parse_options():
     parser.add_argument('--history', '-y', nargs='?', default=None, const='' )
 
     parser.add_argument('--profile-pattern', '-p', action='append', default=[], dest='profile_filters'
-                       , help="a shell-alike pattern to filter profile names; we'll take the first one")
+                       , help="a shell-alike pattern to filter profile paths; we'll take the first one")
 
     _MAX_PROFILES_DEFAULT = 1
     parser.add_argument('--max-profiles', '-m', dest='max_profiles', nargs='?', default=None, const=_MAX_PROFILES_DEFAULT, type=int
                        , help = "use first max_profiles found (default {})".format( _MAX_PROFILES_DEFAULT ) )
+
+    parser.add_argument('--list-profiles', '-L', dest='list_profiles', action='store_true', default=None
+                       , help = "list existing profiles and their paths" )
 
     # this will have priority compared to --profile-pattern ( as a more low-level thing ) )
     parser.add_argument('--use-places', '--db', dest='places_sqlite', default = None
@@ -420,7 +451,16 @@ if __name__ == "__main__":
         firefox_path = get_path('firefox')
         home_dir = os.environ['HOME']
         firefox_path = home_dir + firefox_path; print(firefox_path)
-        
+
+        if options.list_profiles:
+            od = list_profiles( firefox_path )
+            _swapped = [ (n, p) for (p, n) in od.items() ]
+            
+            # probably some better formatting (and/or sorting) would be appropriate
+            pp( _swapped )
+
+            sys.exit(0)
+
         sqlite_paths = [] # not set yet
         if options.places_sqlite is not None:
             if os.path.exists( options.places_sqlite ):
