@@ -169,6 +169,18 @@ def convert_moz_time( moz_time_entry ):
     return result
 
 
+def copy_js_files( pathname ):
+    """
+        copy accessory javascript files to the given location if they are missing
+    """
+
+    for js_filename in ( JQ_MIN_PATH, JQ_FT_PATH ):
+        js_orig = os.path.join( PROGDIR, js_filename )
+        js_dest = os.path.join( pathname, js_filename )
+        if not os.path.exists( js_dest ):
+            shutil.copyfile( js_orig, js_dest )
+
+
 def make_temp_filename( query_type = 'bookmarks' ):
     """ let us have a constant rewritable path for query results, 
         ideally in a temporary folder
@@ -177,11 +189,7 @@ def make_temp_filename( query_type = 'bookmarks' ):
     tmpdir = tempfile.gettempdir()
 
     # copy js accessory code if missing
-    for js_filename in ( JQ_MIN_PATH, JQ_FT_PATH ):
-        js_orig = os.path.join( PROGDIR, js_filename )
-        js_dest = os.path.join( tmpdir, js_filename )
-        if not os.path.exists( js_dest ):
-            shutil.copyfile( js_orig, js_dest )
+    copy_js_files( pathname = tmpdir )
 
     if query_type == 'bookmarks' :
         result = os.path.join( tmpdir, 'pyfox-bookmarks.html' )
@@ -192,7 +200,8 @@ def make_temp_filename( query_type = 'bookmarks' ):
 
 
 ## def history(cursor, pattern=None, src=""):
-def history(dbname, pattern=None, src=""):
+## def history(dbname, pattern=None, src=""):
+def history(dbname, options, src="" ):
     ''' Function which extracts history from the sqlite file '''
     
     with open( HTML_TEMPLATE_HISTORY, 'r') as t:
@@ -203,7 +212,7 @@ def history(dbname, pattern=None, src=""):
         with open( FF_QUERY_HISTORY ) as f:
             ff_sql = f.read().rstrip().rstrip(';')
         
-        if pattern is not None:
+        if options.pattern is not None:
             ff_sql += " AND url LIKE '%"+pattern+"%' "
         ff_sql += " ORDER BY last_visit_date DESC;"
 
@@ -236,7 +245,12 @@ def history(dbname, pattern=None, src=""):
 
     html += "</tbody>\n</table>\n</body>\n</html>"
     
-    filename = make_temp_filename( 'history' )
+    if options.output_filename is None:
+        filename = make_temp_filename( 'history' )
+    else:
+        filename = options.output_filename
+        copy_js_files( os.path.dirname( filename ) )
+        
     html_file = open( filename, 'w' )
 
     html_file.write(html)
@@ -246,7 +260,8 @@ def history(dbname, pattern=None, src=""):
 
 
 ## def bookmarks(cursor, pattern=None):
-def bookmarks(dbname, pattern=None, _max_dbg_lines = 20):
+## def bookmarks(dbname, pattern=None, _max_dbg_lines = 20):
+def bookmarks(dbname, options, _max_dbg_lines = 20):
     ''' Function to extract bookmark related information '''
 
     with open( FF_QUERY_BOOKMARKS ) as f:
@@ -256,7 +271,12 @@ def bookmarks(dbname, pattern=None, _max_dbg_lines = 20):
     with open( HTML_TEMPLATE_BOOKMARKS, 'r') as t:
         html = t.read()
 
-    filename = make_temp_filename( 'bookmarks' )
+    if options.output_filename is None:
+        filename = make_temp_filename( 'bookmarks' )
+    else:
+        filename = options.output_filename
+        copy_js_files( os.path.dirname( filename ) )
+    
     html_file = open( filename, 'wb' )
 
     for n, row in enumerate(run_query_wrapper( dbname, ff_query )):
@@ -358,6 +378,10 @@ def parse_options():
     parser.add_argument('--use-places', '--db', dest='places_sqlite', default = None
                        , help="direct path to a 'places.sqlite' database ; takes priority when used along with '--profile-pattern'")
 
+
+    parser.add_argument('--output-file', '-o', dest='output_filename', default = None
+                       , help="dump bookmarks / history to a given location")
+
     args = parser.parse_args()
 
     return args
@@ -425,12 +449,13 @@ if __name__ == "__main__":
     if options.bookmarks is not None:
         ## bookmarks(cursor, pattern=options.bm)
         ## bookmarks(cursor)
-        bookmarks(sqlite_path, pattern=options.bookmarks) 
+        bookmarks(sqlite_path, options = options) 
 
     if options.history is not None:
         print("From firefox")
         ## history(cursor, pattern=options.history, src="firefox")
-        history(sqlite_path, pattern=options.history, src="firefox")
+        ## history(sqlite_path, pattern=options.history, src="firefox")
+        history(sqlite_path, options = options, src="firefox")
         #print("From chrome")
         #history(CHROME_CURSOR, src="chrome")
 
