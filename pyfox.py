@@ -19,6 +19,8 @@ import tempfile
 import fnmatch
 import shutil
 
+# debugging 
+from pprint import pprint as pp
 
 # -----------------------------------------------------------------------------------
 # constants
@@ -201,7 +203,8 @@ def make_temp_filename( query_type = 'bookmarks' ):
 
 ## def history(cursor, pattern=None, src=""):
 ## def history(dbname, pattern=None, src=""):
-def history(dbname, options, src="" ):
+## def history(dbname, options, src="" ):
+def history(dbnames, options, src="" ):
     ''' Function which extracts history from the sqlite file '''
     
     with open( HTML_TEMPLATE_HISTORY, 'r') as t:
@@ -216,18 +219,17 @@ def history(dbname, options, src="" ):
             ff_sql += " AND url LIKE '%"+pattern+"%' "
         ff_sql += " ORDER BY last_visit_date DESC;"
 
+        for dbname in dbnames:
+            for row in run_query_wrapper( dbname, ff_sql ):
 
-        ## execute_query(cursor, ff_sql)
-        for row in run_query_wrapper( dbname, ff_sql ):
+                last_visit = convert_moz_time( row[2] )
 
-            last_visit = convert_moz_time( row[2] )
+                link = row[0]
+                show_link = link[:100]
+                title = row[1][:100]
 
-            link = row[0]
-            show_link = link[:100]
-            title = row[1][:100]
-
-            trow = "<tr><td><a href='{link}'>{title}</a></td><td>{last_visit}</td><td>{show_link}</td></tr>\n".format( **locals() )
-            html += trow
+                trow = "<tr><td><a href='{link}'>{title}</a></td><td>{last_visit}</td><td>{show_link}</td></tr>\n".format( **locals() )
+                html += trow
 
 
     # turning off chrome 'branch' -- anyone interested feel free to reopen it and handle like FF code above )
@@ -261,7 +263,7 @@ def history(dbname, options, src="" ):
 
 ## def bookmarks(cursor, pattern=None):
 ## def bookmarks(dbname, pattern=None, _max_dbg_lines = 20):
-def bookmarks(dbname, options, _max_dbg_lines = 20):
+def bookmarks(dbnames, options, _max_dbg_lines = 20):
     ''' Function to extract bookmark related information '''
 
     with open( FF_QUERY_BOOKMARKS ) as f:
@@ -279,20 +281,21 @@ def bookmarks(dbname, options, _max_dbg_lines = 20):
     
     html_file = open( filename, 'wb' )
 
-    for n, row in enumerate(run_query_wrapper( dbname, ff_query )):
+    for dbname in dbnames:
+        for n, row in enumerate(run_query_wrapper( dbname, ff_query )):
 
-        link = row[0]
-        show_link = link[:100]
-        title = row[1]
+            link = row[0]
+            show_link = link[:100]
+            title = row[1]
 
-        date = convert_moz_time( row[2] )
+            date = convert_moz_time( row[2] )
 
-        folder = row[3]
+            folder = row[3]
 
-        html += "<tr><td><a href='{link}'>{title}</a></td><td>{date}</td><td>{folder}</td><td>{show_link}</td></tr>\n".format( **locals() )
-        
-        if n < _max_dbg_lines:
-            print( "%s %s" % (link, title) )
+            html += "<tr><td><a href='{link}'>{title}</a></td><td>{date}</td><td>{folder}</td><td>{show_link}</td></tr>\n".format( **locals() )
+            
+            if n < _max_dbg_lines:
+                print( "%s %s" % (link, title) )
 
     html += "</tbody>\n</table>\n</body>\n</html>"
 
@@ -335,7 +338,7 @@ def get_path(browser):
     return path
 
 
-def list_places(base_dir, filter_pattern):
+def list_places(base_dir, filter_patterns = [], _default_filter = '*'):
     """find all profiles -- folders with 'places.sqlite' inside
        and return a list of 'places.sqlite' full paths
        
@@ -346,17 +349,32 @@ def list_places(base_dir, filter_pattern):
 
     found = []
 
-    # if there are no glob characters at all, append some
-    if '*' not in filter_pattern:
-        if '?' not in filter_pattern:
-            filter_pattern = '*' + filter_pattern + '*'
+    if not filter_patterns:
+        filter_patterns = [ _default_filter ]
+
+    # correct supplied patterns wrapping them with '*' if needed )
+    patterns = []
+    for p in filter_patterns :
+        # if there are no glob characters at all, append some
+        if '*' not in p:
+            if '?' not in p:
+                p = '*' + p + '*'
+
+        patterns.append(p)
 
     dirs = os.listdir( base_dir )
-    filtered = fnmatch.filter( dirs, filter_pattern )
-    for d in filtered:
-        testpath = os.path.join( base_dir, d, DBNAME )
-        if os.path.exists( testpath ):
-            found.append( testpath )
+    
+    # apply all patterns, collect anything matching
+    for p in patterns:
+        filtered = fnmatch.filter( dirs, p )
+
+        for d in filtered:
+            testpath = os.path.join( base_dir, d, DBNAME )
+            if os.path.exists( testpath ):
+                if _dbg:
+                    _fmt = "found a matching profile: {0!r} /{1!r}/"
+                    print( _fmt.format( testpath, p ) )
+                found.append( testpath )
 
     return found
 
@@ -371,8 +389,12 @@ def parse_options():
     parser.add_argument('--bookmarks', '--bm', '-b', action='store_true', default=None)
     parser.add_argument('--history', '-y', nargs='?', default=None, const='' )
 
-    parser.add_argument('--profile-pattern', '-p', default="*", dest='profile_filter'
+    parser.add_argument('--profile-pattern', '-p', action='append', default=[], dest='profile_filters'
                        , help="a shell-alike pattern to filter profile names; we'll take the first one")
+
+    _MAX_PROFILES_DEFAULT = 1
+    parser.add_argument('--max-profiles', '-m', dest='max_profiles', nargs='?', default=None, const=_MAX_PROFILES_DEFAULT, type=int
+                       , help = "use first max_profiles found (default {})".format( _MAX_PROFILES_DEFAULT ) )
 
     # this will have priority compared to --profile-pattern ( as a more low-level thing ) )
     parser.add_argument('--use-places', '--db', dest='places_sqlite', default = None
@@ -399,36 +421,37 @@ if __name__ == "__main__":
         home_dir = os.environ['HOME']
         firefox_path = home_dir + firefox_path; print(firefox_path)
         
-        sqlite_path = None # not set yet
+        sqlite_paths = [] # not set yet
         if options.places_sqlite is not None:
             if os.path.exists( options.places_sqlite ):
-                sqlite_path = options.places_sqlite
+                sqlite_paths = [ options.places_sqlite ]
             else:
                 print( "--db: path {0!r} does not exist!".format( options.places_sqlite )
                      , file=sys.stderr  
                      )
 
         # next try
-        if sqlite_path is None:
+        if not sqlite_paths :
         
-            places = list_places( firefox_path, filter_pattern=options.profile_filter )
-            ## profiles = [i for i in os.listdir(firefox_path) if i.endswith('.default')]
-            ## sqlite_path = firefox_path+ profiles[0]+'/places.sqlite'
-            if places:
-                sqlite_path = places[0]
-            else:
+            places = list_places( firefox_path, filter_patterns=options.profile_filters )
+            if not places:
                 print("no profile found") ; sys.exit(2)
 
-        print(sqlite_path)
+            if options.max_profiles :
+                places = places[:(options.max_profiles)]
 
-        if 0:
-            if os.path.exists(sqlite_path):
-                firefox_connection = sqlite3.connect(sqlite_path)
+            ## profiles = [i for i in os.listdir(firefox_path) if i.endswith('.default')]
+            ## sqlite_path = firefox_path+ profiles[0]+'/places.sqlite'
+            sqlite_paths = places
+            if not sqlite_paths:
+                print("no suitable profile found") ; sys.exit(2)
+
+        pp( sqlite_paths )
 
         # ^^^ not sure why we need this additional check, 
         #     but let's preserve it just in case if it helps to debug something 
         if _dbg:
-            assert os.path.exists( sqlite_path )
+            assert os.path.exists( sqlite_paths[0] )
 
 
         #chrome_sqlite_path = '/home/thewhitetulip/.config/chromium/Default/History'
@@ -449,13 +472,13 @@ if __name__ == "__main__":
     if options.bookmarks is not None:
         ## bookmarks(cursor, pattern=options.bm)
         ## bookmarks(cursor)
-        bookmarks(sqlite_path, options = options) 
+        bookmarks(sqlite_paths, options = options) 
 
     if options.history is not None:
         print("From firefox")
         ## history(cursor, pattern=options.history, src="firefox")
         ## history(sqlite_path, pattern=options.history, src="firefox")
-        history(sqlite_path, options = options, src="firefox")
+        history(sqlite_paths, options = options, src="firefox")
         #print("From chrome")
         #history(CHROME_CURSOR, src="chrome")
 
