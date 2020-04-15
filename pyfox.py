@@ -205,22 +205,26 @@ def make_temp_filename( query_type = 'bookmarks' ):
 ## def history(cursor, pattern=None, src=""):
 ## def history(dbname, pattern=None, src=""):
 ## def history(dbname, options, src="" ):
-def history(dbnames, options, src="" ):
+def history(dbnames, options, profiles={}, src="" ):
     ''' Function which extracts history from the sqlite file '''
-    
+
     with open( HTML_TEMPLATE_HISTORY, 'r') as t:
-        html = t.read()
+        html_chunks = [ t.read() ]
 
     if src == 'firefox':
         
         with open( FF_QUERY_HISTORY ) as f:
             ff_sql = f.read().rstrip().rstrip(';')
         
-        if options.pattern is not None:
+        pattern = options.history
+        ## if options.pattern is not None:
+        if pattern is not None:
             ff_sql += " AND url LIKE '%"+pattern+"%' "
         ff_sql += " ORDER BY last_visit_date DESC;"
 
         for dbname in dbnames:
+            
+            profile_name = get_profile_name( dbname, profiles )
             for row in run_query_wrapper( dbname, ff_sql ):
 
                 last_visit = convert_moz_time( row[2] )
@@ -229,8 +233,17 @@ def history(dbnames, options, src="" ):
                 show_link = link[:100]
                 title = row[1][:100]
 
-                trow = "<tr><td><a href='{link}'>{title}</a></td><td>{last_visit}</td><td>{show_link}</td></tr>\n".format( **locals() )
-                html += trow
+                _parts = [ "<tr>"
+                         , "<td><a href='{link}'>{title}</a></td>"
+                         , "<td>{last_visit}</td>"
+                         , "<td>{show_link}</td>"
+                         , "<td>{profile_name}</td>"
+                         , "</tr>\n" 
+                         ]
+
+                ## trow = "<tr><td><a href='{link}'>{title}</a></td><td>{last_visit}</td><td>{show_link}</td></tr>\n".format( **locals() )
+                trow = ''.join(_parts).format( **locals() )
+                html_chunks.append( trow )
 
 
     # turning off chrome 'branch' -- anyone interested feel free to reopen it and handle like FF code above )
@@ -246,7 +259,8 @@ def history(dbnames, options, src="" ):
                 print("%s %s"%(row[0], row[4]))
 
 
-    html += "</tbody>\n</table>\n</body>\n</html>"
+    html_chunks.append( "</tbody>\n</table>\n</body>\n</html>" )
+    html = ''.join( html_chunks )
     
     if options.output_filename is None:
         filename = make_temp_filename( 'history' )
@@ -264,7 +278,7 @@ def history(dbnames, options, src="" ):
 
 ## def bookmarks(cursor, pattern=None):
 ## def bookmarks(dbname, pattern=None, _max_dbg_lines = 20):
-def bookmarks(dbnames, options, _max_dbg_lines = 20):
+def bookmarks(dbnames, options, profiles={}, _max_dbg_lines = 20):
     ''' Function to extract bookmark related information '''
 
     with open( FF_QUERY_BOOKMARKS ) as f:
@@ -283,6 +297,11 @@ def bookmarks(dbnames, options, _max_dbg_lines = 20):
     html_file = open( filename, 'wb' )
 
     for dbname in dbnames:
+        
+        profile_name = get_profile_name( dbname, profiles )
+        if _dbg:
+            print( f"profile: {profile_name!r}" )
+
         for n, row in enumerate(run_query_wrapper( dbname, ff_query )):
 
             link = row[0]
@@ -293,8 +312,17 @@ def bookmarks(dbnames, options, _max_dbg_lines = 20):
 
             folder = row[3]
 
-            html += "<tr><td><a href='{link}'>{title}</a></td><td>{date}</td><td>{folder}</td><td>{show_link}</td></tr>\n".format( **locals() )
-            
+            _parts = [ "<tr>"
+                     , "<td><a href='{link}'>{title}</a></td>"
+                     , "<td>{date}</td>"
+                     , "<td>{folder}</td>"
+                     , "<td>{show_link}</td>"
+                     , "<td>{profile_name}</td>"
+                     , "</tr>\n"
+                     ]
+            ## html += "<tr><td><a href='{link}'>{title}</a></td><td>{date}</td><td>{folder}</td><td>{show_link}</td></tr>\n".format( **locals() )
+            html += ''.join(_parts).format( **locals() )
+
             if n < _max_dbg_lines:
                 print( "%s %s" % (link, title) )
 
@@ -363,6 +391,22 @@ def list_profiles( base_dir ):
                     
                     result[ fullpath ] = n
                     
+    return result
+
+
+def get_profile_name( places_pathname, profile_dict ):
+    """ check the name in 'profiles.ini' and return the filename if not found """
+
+    where = os.path.dirname( places_pathname )
+    std_name = profile_dict.get( where, None )
+
+    shortname = os.path.basename( where )
+
+    if std_name is not None:
+        result = "{0} ({1!r})".format( std_name, shortname )
+    else:
+        result = "{}".format( shortname )
+
     return result
 
 
@@ -452,9 +496,10 @@ if __name__ == "__main__":
         home_dir = os.environ['HOME']
         firefox_path = home_dir + firefox_path; print(firefox_path)
 
+        profile_dict = list_profiles( firefox_path )
+
         if options.list_profiles:
-            od = list_profiles( firefox_path )
-            _swapped = [ (n, p) for (p, n) in od.items() ]
+            _swapped = [ (n, p) for (p, n) in profile_dict.items() ]
             
             # probably some better formatting (and/or sorting) would be appropriate
             pp( _swapped )
@@ -512,13 +557,13 @@ if __name__ == "__main__":
     if options.bookmarks is not None:
         ## bookmarks(cursor, pattern=options.bm)
         ## bookmarks(cursor)
-        bookmarks(sqlite_paths, options = options) 
+        bookmarks(sqlite_paths, options = options, profiles = profile_dict ) 
 
     if options.history is not None:
         print("From firefox")
         ## history(cursor, pattern=options.history, src="firefox")
         ## history(sqlite_path, pattern=options.history, src="firefox")
-        history(sqlite_paths, options = options, src="firefox")
+        history(sqlite_paths, options = options, profiles = profile_dict, src="firefox")
         #print("From chrome")
         #history(CHROME_CURSOR, src="chrome")
 
