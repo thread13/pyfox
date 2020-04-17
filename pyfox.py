@@ -244,6 +244,12 @@ def _pass_filters( title, link
         returns True for (a) and (b) and only when so        
     """
 
+    # a quick workaround ( for former NULL-s, I guess )
+    if title is None:
+        title = ''
+    if link is None:
+        link = ''
+
     query_matched = True # passed by default
     if parsed_query:
         _link_matched  = fnmatch_pass( link, parsed_query )
@@ -281,19 +287,18 @@ def _pass_filters( title, link
 ## def history(cursor, pattern=None, src=""):
 ## def history(dbname, pattern=None, src=""):
 ## def history(dbname, options, src="" ):
-def history(dbnames, options, profiles={}, src="" ):
+def history(dbnames, options, profiles={}, src="", _max_dbg_lines = 20 ):
     ''' Function which extracts history from the sqlite file '''
 
     with open( HTML_TEMPLATE_HISTORY, 'r') as t:
         html_chunks = [ t.read() ]
 
-    if 0:
-        parsed_query = None
-        if options.query is not None:
-            parsed_query = parse_query( options.query )
-        parsed_filter = None
-        if options.filter is not None:
-            parsed_filter = parse_query( options.filter )
+    parsed_query = None
+    if options.query is not None:
+        parsed_query = parse_query( options.query )
+    parsed_filter = None
+    if options.filter is not None:
+        parsed_filter = parse_query( options.filter )
 
 
     if src == 'firefox':
@@ -318,7 +323,17 @@ def history(dbnames, options, profiles={}, src="" ):
                 show_link = link[:100]
                 title = row[1][:100]
 
+                if not _pass_filters( title = title
+                                    , link = link
+                                    , parsed_query = parsed_query
+                                    , parsed_filter = parsed_filter
+                                    , _n_lines_max = _max_dbg_lines
+                                    ):
+                    # no match or filtered by the filter expression --
+                    # -- skip this one
+                    continue
 
+                # else ...
 
                 _parts = [ "<tr>"
                          , "<td><a href='{link}'>{title}</a></td>"
@@ -396,7 +411,6 @@ def bookmarks(dbnames, options, profiles={}, _max_dbg_lines = 20):
         if _dbg:
             print( f"profile: {profile_name!r}" )
 
-        _dbg_m = 0
         for n, row in enumerate(run_query_wrapper( dbname, ff_query )):
 
             link = row[0]
@@ -737,3 +751,4 @@ if __name__ == "__main__":
 
     ## cursor.close()
     #CHROME_CURSOR.close()
+
