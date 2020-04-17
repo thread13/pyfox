@@ -231,6 +231,53 @@ def make_temp_filename( query_type = 'bookmarks' ):
     return result
 
 
+def _pass_filters( title, link
+                 , parsed_query, parsed_filter
+                 , _n_lines_max = 20
+                 , _counter = [0]
+                 ):
+    """
+        check if url and title: 
+          (a) match 'parsed_query' and 
+          (b) do not match 'parsed_filter'
+          
+        returns True for (a) and (b) and only when so        
+    """
+
+    query_matched = True # passed by default
+    if parsed_query:
+        _link_matched  = fnmatch_pass( link, parsed_query )
+        _title_matched = fnmatch_pass( title, parsed_query )
+        
+        query_matched = _link_matched or _title_matched
+
+    if not query_matched:
+        if _dbg:
+            if _counter[0] < _n_lines_max:
+                print(f"# {title} / {link!r} : no match!")
+                _counter[0] = _counter[0] + 1
+        # skip this row
+        return False
+
+    query_filtered = False # passed by default
+    if parsed_filter:
+        _link_filtered  = fnmatch_pass( link, parsed_filter )
+        _title_filtered = fnmatch_pass( title, parsed_filter )
+        
+        query_filtered = _link_filtered or _title_filtered
+
+    if query_filtered:
+        if _dbg:
+            if _counter[0] < _n_lines_max:
+                print(f"# {title} / {link!r} : filtered!")
+                _counter[0] = _counter[0] + 1
+        # skip this row
+        return False
+
+    # else ...
+    return True
+
+
 ## def history(cursor, pattern=None, src=""):
 ## def history(dbname, pattern=None, src=""):
 ## def history(dbname, options, src="" ):
@@ -239,6 +286,15 @@ def history(dbnames, options, profiles={}, src="" ):
 
     with open( HTML_TEMPLATE_HISTORY, 'r') as t:
         html_chunks = [ t.read() ]
+
+    if 0:
+        parsed_query = None
+        if options.query is not None:
+            parsed_query = parse_query( options.query )
+        parsed_filter = None
+        if options.filter is not None:
+            parsed_filter = parse_query( options.filter )
+
 
     if src == 'firefox':
         
@@ -261,6 +317,8 @@ def history(dbnames, options, profiles={}, src="" ):
                 link = row[0]
                 show_link = link[:100]
                 title = row[1][:100]
+
+
 
                 _parts = [ "<tr>"
                          , "<td><a href='{link}'>{title}</a></td>"
@@ -345,34 +403,14 @@ def bookmarks(dbnames, options, profiles={}, _max_dbg_lines = 20):
             show_link = link[:100]
             title = row[1]
 
-            query_matched = True # passed by default
-            if parsed_query:
-                _link_matched  = fnmatch_pass( link, parsed_query )
-                _title_matched = fnmatch_pass( title, parsed_query )
-                
-                query_matched = _link_matched or _title_matched
-
-            if not query_matched:
-                if _dbg:
-                    if _dbg_m < _max_dbg_lines:
-                        print(f"# {title} / {link!r} : no match!")
-                        _dbg_m += 1
-                # skip this row
-                continue
- 
-            query_filtered = False # passed by default
-            if parsed_filter:
-                _link_filtered  = fnmatch_pass( link, parsed_filter )
-                _title_filtered = fnmatch_pass( title, parsed_filter )
-                
-                query_filtered = _link_filtered or _title_filtered
-
-            if query_filtered:
-                if _dbg:
-                    if _dbg_m < _max_dbg_lines:
-                        print(f"# {title} / {link!r} : filtered!")
-                        _dbg_m += 1
-                # skip this row
+            if not _pass_filters( title = title
+                                , link = link
+                                , parsed_query = parsed_query
+                                , parsed_filter = parsed_filter
+                                , _n_lines_max = _max_dbg_lines
+                                ):
+                # no match or filtered by the filter expression --
+                # -- skip this one
                 continue
 
             # else ...
