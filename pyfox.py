@@ -24,6 +24,33 @@ from configparser import SafeConfigParser
 from pprint import pprint as pp
 
 # -----------------------------------------------------------------------------------
+# cwd finder
+
+def resolve_symlink( pathname, _level = 0, _maxlevel = 8 ):
+    """  """
+
+    result = pathname # default
+
+    if _level > _maxlevel :
+        _msg = "resolve_symlink({0!r}): too many indirection levels ({1})".format( pathname, _level )
+        raise RuntimeError( _msg )
+    # else ..
+
+    # nb: islink() returns False for non-existent paths
+    if os.path.islink( pathname ):
+        path = os.path.dirname( pathname )
+        link = os.readlink( pathname )
+        
+        newpath = os.path.join( path, link )
+        if _dbg:
+            print( "resolving: {0!r} -> {1!r}".format( pathname, newpath ) )
+
+        result = resolve_symlink( newpath, _level = _level + 1 )
+
+    return result
+
+
+# -----------------------------------------------------------------------------------
 # constants
 
 # "dev mode" with full tracebacks
@@ -45,7 +72,8 @@ FF_QUERY_BOOKMARKS = 'bookmarks_query.sql'
 FF_QUERY_HISTORY   = 'history_query.sql'
 # this can be wrapped with some function/class and invoked from __main__,
 # however, for a small utility it shall just do
-PROGDIR = os.path.dirname( sys.argv[0] )
+## PROGDIR = os.path.dirname( sys.argv[0] )
+PROGDIR = os.path.dirname( resolve_symlink( sys.argv[0] ) )
 ## print( f"PROGDIR: {PROGDIR!r}" )
 
 # converting to paths relative to sys.argv[0]
@@ -414,6 +442,16 @@ def get_profile_name( places_pathname, profile_dict ):
     return result
 
 
+def fnmatch_decorate( pattern ):
+    """ wrap the given sting with '*' if there are no other glob symbols in it """
+
+    if '*' not in pattern:
+        if '?' not in pattern:
+            pattern = '*' + pattern + '*'
+            
+    return pattern
+
+
 def list_places(base_dir, filter_patterns = [], _default_filter = '*'):
     """find all profiles -- folders with 'places.sqlite' inside
        and return a list of 'places.sqlite' full paths
@@ -432,9 +470,7 @@ def list_places(base_dir, filter_patterns = [], _default_filter = '*'):
     patterns = []
     for p in filter_patterns :
         # if there are no glob characters at all, append some
-        if '*' not in p:
-            if '?' not in p:
-                p = '*' + p + '*'
+        p = fnmatch_decorate( p )
 
         patterns.append(p)
 
