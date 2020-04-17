@@ -19,6 +19,7 @@ import tempfile
 import fnmatch
 import shutil
 from configparser import SafeConfigParser
+import re
 
 # debugging 
 from pprint import pprint as pp
@@ -312,6 +313,12 @@ def bookmarks(dbnames, options, profiles={}, _max_dbg_lines = 20):
     with open( FF_QUERY_BOOKMARKS ) as f:
         ff_query = f.read()
 
+    parsed_query = None
+    if options.query is not None:
+        parsed_query = parse_query( options.query )
+    parsed_filter = None
+    if options.filter is not None:
+        parsed_filter = parse_query( options.filter )
 
     with open( HTML_TEMPLATE_BOOKMARKS, 'r') as t:
         ## html = t.read()
@@ -331,11 +338,44 @@ def bookmarks(dbnames, options, profiles={}, _max_dbg_lines = 20):
         if _dbg:
             print( f"profile: {profile_name!r}" )
 
+        _dbg_m = 0
         for n, row in enumerate(run_query_wrapper( dbname, ff_query )):
 
             link = row[0]
             show_link = link[:100]
             title = row[1]
+
+            query_matched = True # passed by default
+            if parsed_query:
+                _link_matched  = fnmatch_pass( link, parsed_query )
+                _title_matched = fnmatch_pass( title, parsed_query )
+                
+                query_matched = _link_matched or _title_matched
+
+            if not query_matched:
+                if _dbg:
+                    if _dbg_m < _max_dbg_lines:
+                        print(f"# {title} / {link!r} : no match!")
+                        _dbg_m += 1
+                # skip this row
+                continue
+ 
+            query_filtered = False # passed by default
+            if parsed_filter:
+                _link_filtered  = fnmatch_pass( link, parsed_filter )
+                _title_filtered = fnmatch_pass( title, parsed_filter )
+                
+                query_filtered = _link_filtered or _title_filtered
+
+            if query_filtered:
+                if _dbg:
+                    if _dbg_m < _max_dbg_lines:
+                        print(f"# {title} / {link!r} : filtered!")
+                        _dbg_m += 1
+                # skip this row
+                continue
+
+            # else ...
 
             date = convert_moz_time( row[2] )
 
@@ -491,6 +531,51 @@ def list_places(base_dir, filter_patterns = [], _default_filter = '*'):
     return found
 
 
+def parse_query( query_expr ):
+    """
+         'http://* google OR https://* twitter' 
+        =>
+         [ 'http://* google ',  'https://* twitter']
+        =>
+         [ ('http://*', '*google*'), ('https://*', '*twitter*') ]
+    """
+
+    result = []
+    or_parts = re.split('OR', query_expr)
+    
+    for part in or_parts :
+        tokens = part.split()
+        # nb: we also convert them to lower-case (shall "just work" in Py3 ))
+        tokens = [ fnmatch_decorate(t.lower()) for t in tokens ]
+
+        result.append( tokens )
+
+    return result
+
+
+def fnmatch_pass( text, parsed_query ):
+    """
+        check if text matches any group of filters as defined by parse_query()
+    """
+
+    text = text.lower()
+
+    passed = False # default, empty query -> "no pass"
+    for or_group in parsed_query:
+        passed = True # changing default ; "no filters" -> pass
+        for expr in or_group :
+            if not fnmatch.fnmatch( text, expr ):
+                passed = False
+                break
+        
+    # at this stage, any "well-defined" (no empty clauses) query 
+    # will match when and only when there's at least one group
+    # where all filters match
+
+    return passed
+
+
+
 def parse_options():
     """ handle command-line arguments """
 
@@ -518,6 +603,11 @@ def parse_options():
 
     parser.add_argument('--output-file', '-o', dest='output_filename', default = None
                        , help="dump bookmarks / history to a given location")
+
+    parser.add_argument('--query', '-q', dest='query', default = None
+                       , help="apply a filter to pass matching links/titles ; an example: 'http://* google OR https://* twitter' : OR splits groups, within each group all tokens are AND-ed")
+    parser.add_argument('--filter', '-f', dest='filter', default = None
+                       , help="apply a filter to drop matching links/titles ; basically it is a 'not --query ...' and is AND-ed with the --query filter, if any ")
 
     args = parser.parse_args()
 
