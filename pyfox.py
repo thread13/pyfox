@@ -286,7 +286,8 @@ def bookmarks(dbnames, options, profiles={}, _max_dbg_lines = 20):
 
 
     with open( HTML_TEMPLATE_BOOKMARKS, 'r') as t:
-        html = t.read()
+        ## html = t.read()
+        html_chunks = [ t.read() ]
 
     if options.output_filename is None:
         filename = make_temp_filename( 'bookmarks' )
@@ -321,12 +322,15 @@ def bookmarks(dbnames, options, profiles={}, _max_dbg_lines = 20):
                      , "</tr>\n"
                      ]
             ## html += "<tr><td><a href='{link}'>{title}</a></td><td>{date}</td><td>{folder}</td><td>{show_link}</td></tr>\n".format( **locals() )
-            html += ''.join(_parts).format( **locals() )
+            line = ''.join(_parts).format( **locals() )
+            html_chunks.append( line )
 
             if n < _max_dbg_lines:
                 print( "%s %s" % (link, title) )
 
-    html += "</tbody>\n</table>\n</body>\n</html>"
+    html_chunks.append( "</tbody>\n</table>\n</body>\n</html>" )
+
+    html = ''.join( html_chunks )
 
     # TODO: handle possible encoding issues if bookmarks aren't in utf-8 
     #       ( could they be? what the docs say? )
@@ -466,7 +470,7 @@ def parse_options():
 
     _MAX_PROFILES_DEFAULT = 1
     parser.add_argument('--max-profiles', '-m', dest='max_profiles', nargs='?', default=None, const=_MAX_PROFILES_DEFAULT, type=int
-                       , help = "use first max_profiles found (default {})".format( _MAX_PROFILES_DEFAULT ) )
+                       , help = "use first max_profiles found (default {} if set, none if unset)".format( _MAX_PROFILES_DEFAULT ) )
 
     parser.add_argument('--list-profiles', '-L', dest='list_profiles', action='store_true', default=None
                        , help = "list existing profiles and their paths" )
