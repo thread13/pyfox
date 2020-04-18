@@ -24,6 +24,15 @@ import re
 # debugging 
 from pprint import pprint as pp
 
+# trying to load additional url filters for history sql queries
+HISTORY_SQL_URL_FILTERS = [] # an empty sequence
+try:
+    from pyfox_filters import HISTORY_SQL_URL_FILTERS
+except ImportError:
+    print( "! Failed to import additional SQL filters from 'pyfox_filters.py'"
+         , file=sys.stderr )
+
+
 # -----------------------------------------------------------------------------------
 # cwd finder
 
@@ -89,6 +98,15 @@ HTML_TEMPLATE_HISTORY   = os.path.join( PROGDIR, HTML_TEMPLATE_HISTORY )
 JQ_MIN_PATH = 'jquery.min.js'
 JQ_FT_PATH  = 'jquery.filtertable.min.js'
 
+#
+# accessory constants
+#
+
+# strip '-- ... end-of-line' sql comments
+RE_SQL_COMMENT_1 = re.compile(r'--.*$', re.MULTILINE)
+# strip C-like comments ( sadly would also work inside sql strings )
+RE_SQL_COMMENT_2 = re.compile(r'/[*].*?[*]/', re.DOTALL)
+
 # -----------------------------------------------------------------------------------
 
 if 0:
@@ -101,6 +119,32 @@ if 0:
                 print(str(error) + "\n " + query)
             else:
                 raise
+
+
+def sql_quick_strip_comments( sql_code
+                            , _re_strip_1 = RE_SQL_COMMENT_1
+                            , _re_strip_2 = RE_SQL_COMMENT_2
+                            ):
+    """ a quick hack using regexps """
+
+    result = _re_strip_1.sub('', sql_code)
+    result = _re_strip_2.sub('', result)
+
+    return result
+
+
+def history_add_sql_url_filters( stripped_sql
+                               , decorated_like_tokens
+                               ):
+
+    fragments = []
+    for t in decorated_like_tokens:
+        fragments.append( "AND url NOT LIKE '{}'".format( t ) )
+
+    append_text = '\n'.join( fragments )
+    result = stripped_sql + '\n' + append_text + '\n'
+
+    return result
 
 
 # an external wrapper
@@ -287,7 +331,8 @@ def _pass_filters( title, link
 ## def history(cursor, pattern=None, src=""):
 ## def history(dbname, pattern=None, src=""):
 ## def history(dbname, options, src="" ):
-def history(dbnames, options, profiles={}, src="", _max_dbg_lines = 20 ):
+## def history(dbnames, options, profiles={}, src="", _max_dbg_lines = 20 ):
+def history(dbnames, options, sql_filters, profiles={}, src="", _max_dbg_lines = 20 ):
     ''' Function which extracts history from the sqlite file '''
 
     with open( HTML_TEMPLATE_HISTORY, 'r') as t:
@@ -304,7 +349,10 @@ def history(dbnames, options, profiles={}, src="", _max_dbg_lines = 20 ):
     if src == 'firefox':
         
         with open( FF_QUERY_HISTORY ) as f:
-            ff_sql = f.read().rstrip().rstrip(';')
+            
+            sql_code = f.read()
+            no_comments = sql_quick_strip_comments( sql_code )
+            ff_sql = no_comments.rstrip().rstrip(';')
 
         # '--history' loses an optional "pattern" argument --
         #  -- use '--query' and '--filter' options instead
@@ -313,6 +361,8 @@ def history(dbnames, options, profiles={}, src="", _max_dbg_lines = 20 ):
             ## if options.pattern is not None:
             if pattern is not None:
                 ff_sql += " AND url LIKE '%"+pattern+"%' "
+
+        ff_sql = history_add_sql_url_filters( ff_sql, sql_filters )
 
         ff_sql += " ORDER BY last_visit_date DESC;"
 
@@ -538,8 +588,17 @@ def get_profile_name( places_pathname, profile_dict ):
     return result
 
 
+def sql_like_decorate( pattern ):
+    """ wrap the given string with '%' if it is not already there """
+
+    if '%' not in pattern:
+        pattern = '%' + pattern + '%'
+
+    return pattern
+
+
 def fnmatch_decorate( pattern ):
-    """ wrap the given sting with '*' if there are no other glob symbols in it """
+    """ wrap the given string with '*' if there are no other glob symbols in it """
 
     if '*' not in pattern:
         if '?' not in pattern:
@@ -678,6 +737,9 @@ if __name__ == "__main__":
 
     options = parse_options()
 
+    # wrap imported filter fragments, if any, with sql 'like' globbing characters ('%')
+    HISTORY_SQL_URL_FILTERS = [ sql_like_decorate(f) for f in HISTORY_SQL_URL_FILTERS ]
+
     try:
         firefox_path = get_path('firefox')
         home_dir = os.environ['HOME']
@@ -750,7 +812,13 @@ if __name__ == "__main__":
         print("From firefox")
         ## history(cursor, pattern=options.history, src="firefox")
         ## history(sqlite_path, pattern=options.history, src="firefox")
-        history(sqlite_paths, options = options, profiles = profile_dict, src="firefox")
+        ## history(sqlite_paths, options = options, profiles = profile_dict, src="firefox")
+        history( sqlite_paths
+               , options = options
+               , sql_filters = HISTORY_SQL_URL_FILTERS
+               , profiles = profile_dict
+               , src="firefox")
+
         #print("From chrome")
         #history(CHROME_CURSOR, src="chrome")
 
