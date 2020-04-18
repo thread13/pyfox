@@ -305,11 +305,15 @@ def history(dbnames, options, profiles={}, src="", _max_dbg_lines = 20 ):
         
         with open( FF_QUERY_HISTORY ) as f:
             ff_sql = f.read().rstrip().rstrip(';')
-        
-        pattern = options.history
-        ## if options.pattern is not None:
-        if pattern is not None:
-            ff_sql += " AND url LIKE '%"+pattern+"%' "
+
+        # '--history' loses an optional "pattern" argument --
+        #  -- use '--query' and '--filter' options instead
+        if 0:
+            pattern = options.history
+            ## if options.pattern is not None:
+            if pattern is not None:
+                ff_sql += " AND url LIKE '%"+pattern+"%' "
+
         ff_sql += " ORDER BY last_visit_date DESC;"
 
         for dbname in dbnames:
@@ -636,7 +640,8 @@ def parse_options():
     parser = argparse.ArgumentParser(description=DESC_PYFOX)
 
     parser.add_argument('--bookmarks', '--bm', '-b', action='store_true', default=None)
-    parser.add_argument('--history', '-y', nargs='?', default=None, const='' )
+    ## parser.add_argument('--history', '-y', nargs='?', default=None, const='' )
+    parser.add_argument('--history', '-y', '-H',    action='store_true', default=None)
 
     parser.add_argument('--profile-pattern', '-p', action='append', default=[], dest='profile_filters'
                        , help="a shell-alike pattern to filter profile paths; we'll take the first one")
