@@ -236,11 +236,93 @@ def open_browser(url):
     webbrowser.open(url, autoraise=True)
 
 
+def _parse_date( datestr ):
+    """ 
+        - "2020-02-20" -> datetime(2020, 2, 20, 0, 0) 
+        - "2020-02"    -> datetime(2020, 2,  0, 0, 0) 
+        - "2020"       -> datetime(2020, 0,  0, 0, 0) 
+    """
+
+    result = None
+
+    n_parts = datestr.count('-')
+
+    if 0 == n_parts :
+        result = datetime.strptime(datestr, '%Y')
+    elif 1 == n_parts :
+        result = datetime.strptime(datestr, '%Y-%m')
+    else : 
+        assert 2 == n_parts
+        result = datetime.strptime(datestr, '%Y-%m-%d')
+
+    return result
+
+
+def _parse_date_spec( date_expr ):
+    """ returns a tuple (start_date, end_date), 
+        where each part can be None ;
+        
+        date spec by example : 
+         - '2020-02-02..2020-02-20'
+         - '2020..2030'
+         - '2020-02-02..' 
+           # ^^^ '..' are important 
+           #     since they denote start or end of the interval
+         - '..2020-02-20' # probably less useful, but also correct
+    """
+
+    parts = date_expr.split('.')
+
+    # there shall always be three parts :
+    ## '2020-02-02..2020-02-20'.split('.')
+    ##  =>
+    ## ['2020-02-02', '', '2020-02-20']
+    ##
+    ## '2020-02-02..'.split('.')
+    ##  =>
+    ## ['2020-02-02', '', '']
+
+    assert len(parts) == 3
+
+    start_expr = parts[0]
+    end_expr = parts[-1]
+
+    start_date = None
+    if start_expr != '' :
+        start_date = _parse_date( start_expr )
+
+    end_date = None
+    if end_expr != '' :
+        end_date = _parse_date( end_expr )
+
+    result = ( start_date, end_date )
+    return result
+
+
+def _date_within( some_date, start_date, end_date ):
+    """ 
+        check if start_date <= some_date <= end_date ,
+        considering inequality to be true if either 
+        start_date or end_date is None
+    """
+
+    result = True # start with a truth assumption
+    if start_date is not None:
+        result = result and ( start_date <= some_date )
+
+    if end_date is not None:
+        result = result and ( some_date <= end_date  )
+
+    return result
+
+
+
 def convert_moz_time( moz_time_entry ):
     """ Convert Mozilla timestamp-alike data entries to an ISO 8601-ish representation """
 
     # [ https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSPR/Reference/PRTime ]
-    result = datetime.fromtimestamp( moz_time_entry/1000000 ).strftime('%Y-%m-%d %H:%M:%S')
+    ## result = datetime.fromtimestamp( moz_time_entry/1000000 ).strftime('%Y-%m-%d %H:%M:%S')
+    result = datetime.fromtimestamp( moz_time_entry/1000000 )
 
     return result
 
@@ -345,11 +427,15 @@ def history(dbnames, options, sql_filters, profiles={}, src="", _max_dbg_lines =
     if options.filter is not None:
         parsed_filter = parse_query( options.filter )
 
+    date_cond = None ;  start_date, end_date = ( None, None )
+    if options.date_cond is not None:
+        start_date, end_date = _parse_date_spec( options.date_cond )
+        date_cond = ( start_date, end_date )
 
     if src == 'firefox':
-        
+
         with open( FF_QUERY_HISTORY ) as f:
-            
+
             sql_code = f.read()
             no_comments = sql_quick_strip_comments( sql_code )
             ff_sql = no_comments.rstrip().rstrip(';')
@@ -367,8 +453,10 @@ def history(dbnames, options, sql_filters, profiles={}, src="", _max_dbg_lines =
         ff_sql += " ORDER BY last_visit_date DESC;"
 
         for dbname in dbnames:
-            
+
             profile_name = get_profile_name( dbname, profiles )
+
+            _n_dbg = 0
             for row in run_query_wrapper( dbname, ff_sql ):
 
                 last_visit = convert_moz_time( row[2] )
@@ -376,6 +464,7 @@ def history(dbnames, options, sql_filters, profiles={}, src="", _max_dbg_lines =
                 link = row[0]
                 show_link = link[:100]
                 title = row[1][:100]
+
 
                 if not _pass_filters( title = title
                                     , link = link
@@ -386,6 +475,17 @@ def history(dbnames, options, sql_filters, profiles={}, src="", _max_dbg_lines =
                     # no match or filtered by the filter expression --
                     # -- skip this one
                     continue
+
+                if date_cond is not None:
+                    if not _date_within( last_visit, start_date, end_date ):
+                        if _dbg:
+                            if _n_dbg < _max_dbg_lines:
+                                _n_dbg += 1
+                                print (f"# > {show_link!r} filtered by date: !({start_date} < {last_visit} < {end_date})"
+                                      , file = sys.stderr )
+                        continue
+
+                last_visit = last_visit.strftime('%Y-%m-%d %H:%M:%S')
 
                 # else ...
 
@@ -483,7 +583,8 @@ def bookmarks(dbnames, options, profiles={}, _max_dbg_lines = 20):
 
             # else ...
 
-            date = convert_moz_time( row[2] )
+            date = convert_moz_time( row[2] ) # datetime object
+            date = date.strftime('%Y-%m-%d %H:%M:%S') # a string
 
             folder = row[3]
 
@@ -719,6 +820,11 @@ def parse_options():
 
     parser.add_argument('--output-file', '-o', dest='output_filename', default = None
                        , help="dump bookmarks / history to a given location")
+
+
+    parser.add_argument('--dates', '-d', dest='date_cond', default = None
+                       , help="filter history urls by (last-visited) date: '2020-02-02..2020-02-20', or ''2020-02-02..', or just ''..2020'")
+    
 
     parser.add_argument('--query', '-q', dest='query', default = None
                        , help="apply a filter to pass matching links/titles ; an example: 'http://* google OR https://* twitter' : OR splits groups, within each group all tokens are AND-ed")
